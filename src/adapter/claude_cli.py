@@ -39,8 +39,16 @@ class ClaudeCLIAdapter(AgentAdapter):
         self._should_stop = False
         self._digester = OutputDigester(summarizer=summarizer)
         self._logger = AppLogger(name="ClaudeCLIAdapter", log_level=logging.DEBUG)
+        # For clean async cancellation across threads
+        self._query_task: asyncio.Task | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._async_lock = threading.Lock()
+        self._query_thread: threading.Thread | None = None
 
     def send(self, message: str, context: list[AgentMessage] | None = None) -> Generator[AgentResponse, None, None]:
+        # Wait for any previous async thread to finish cleanup before reusing state
+        if self._query_thread and self._query_thread.is_alive():
+            self._query_thread.join(timeout=2.0)
         self._should_stop = False
         self._digester.reset()
         yield AgentResponse(text="", state=AdapterState.THINKING)
@@ -67,28 +75,44 @@ class ClaudeCLIAdapter(AgentAdapter):
         q: queue.Queue = queue.Queue()
 
         async def _run_query():
+            # Register task so stop() can cancel it across threads
+            with self._async_lock:
+                self._query_task = asyncio.current_task()
             try:
                 async for msg in query(prompt=message, options=options):
-                    if self._should_stop:
-                        break
                     q.put(msg)
+                q.put(_DONE)
+            except asyncio.CancelledError:
+                # Clean cancellation from stop() — don't break out of the async for,
+                # let asyncio propagate CancelledError through the SDK's cancel scopes
                 q.put(_DONE)
             except Exception as e:
                 self._logger.error(f"Claude SDK query error: {e}, {traceback.format_exc()}")
                 q.put((_ERROR, str(e)))
+            finally:
+                with self._async_lock:
+                    self._query_task = None
 
         def _thread_target():
             loop = asyncio.new_event_loop()
+            with self._async_lock:
+                self._loop = loop
             try:
                 loop.run_until_complete(_run_query())
             finally:
+                with self._async_lock:
+                    self._loop = None
                 # Shut down async generators and pending transports cleanly
                 # to avoid "Event loop is closed" warnings on Windows
-                loop.run_until_complete(loop.shutdown_asyncgens())
-                loop.run_until_complete(loop.shutdown_default_executor())
+                try:
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                    loop.run_until_complete(loop.shutdown_default_executor())
+                except Exception:
+                    pass
                 loop.close()
 
         thread = threading.Thread(target=_thread_target, daemon=True, name="ClaudeCLI-Query")
+        self._query_thread = thread
         thread.start()
 
         # Consume from queue, yield AgentResponse objects
@@ -133,6 +157,11 @@ class ClaudeCLIAdapter(AgentAdapter):
 
     def stop(self) -> None:
         self._should_stop = True
+        # Cancel the async task properly so the SDK's cancel scopes unwind
+        # in the correct task context (avoids anyio RuntimeError)
+        with self._async_lock:
+            if self._loop and self._query_task and not self._query_task.done():
+                self._loop.call_soon_threadsafe(self._query_task.cancel)
 
     def is_available(self) -> bool:
         if not self._resolve_cli_path():
@@ -156,6 +185,8 @@ class ClaudeCLIAdapter(AgentAdapter):
 
     def cleanup(self) -> None:
         self.stop()
+        if self._query_thread and self._query_thread.is_alive():
+            self._query_thread.join(timeout=2.0)
 
     @property
     def name(self) -> str:
