@@ -6,7 +6,7 @@ A voice-driven AI assistant with a visual interface. Speak to it, it speaks back
 
 ## What It Does
 
-AgentOPTI listens for speech via offline ASR (Vosk), routes it to the active AI backend, streams the response through text cleaning, and speaks it back via TTS — all while an animated ball visualizes what's happening (thinking, speaking, calling tools, idle). You can interrupt the agent mid-sentence by speaking over it.
+OPTI listens for speech via offline ASR (Vosk), routes it to the active AI backend, streams the response through text cleaning, and speaks it back via TTS — all while an animated ball visualizes what's happening (thinking, speaking, calling tools, idle). You can interrupt the agent mid-sentence by speaking over it.
 
 ## Architecture
 
