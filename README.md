@@ -13,14 +13,14 @@ AgentOPTI listens for speech via offline ASR (Vosk), routes it to the active AI 
 ```mermaid
 graph TB
     subgraph Qt Main Thread
-        Star["Energy Star\n(animated ball + color overlay)"]
+        Star["Energy Star<br/>(animated ball + color overlay)"]
         Bridge["UIBridge"]
     end
 
     subgraph Shell Thread
-        Shell["AgentShell\n(orchestrator)"]
-        Voice["VoiceIO\nASR + TTS"]
-        Adapter["Adapter\n(pluggable)"]
+        Shell["AgentShell<br/>(orchestrator)"]
+        Voice["VoiceIO<br/>ASR + TTS"]
+        Adapter["Adapter<br/>(pluggable)"]
     end
 
     subgraph Backends
@@ -70,18 +70,59 @@ Backends are pluggable via the `AgentAdapter` ABC. Each implements `send()` (str
 
 The active adapter can be switched at runtime via the event bus.
 
-## Requirements
+## Setup
 
-- Python 3.12
-- PySide6 (Qt UI)
-- Vosk (offline speech recognition)
-- pyttsx3 + pygame (TTS with interruptible playback)
-- mistune + beautifulsoup4 (text cleaning pipeline)
+### Prerequisites
+
+- **Python 3.12** (exact major version required)
+- **A microphone** for speech input
+- **Windows** (tested on Windows 11 — uses SAPI5 for TTS voices)
+
+### Installation
+
+```bash
+git clone https://github.com/your-org/opti.git
+cd opti
+
+python -m venv .venv
+.venv\Scripts\activate
+
+# Core dependencies
+pip install -e .
+
+# Optional: cloud API adapters
+pip install -e ".[cloud]"
+```
+
+### Vosk ASR Model
+
+Download the Vosk model and place it under `models/`:
+
+```bash
+mkdir models
+# Download from https://alphacephei.com/vosk/models
+# Extract so the path is: models/vosk-model-small-en-us-0.15/
+```
+
+### Backend Configuration
+
+**Local LLM** — place a GGUF model in `models/` and adjust `InferenceConfig.model_name` in `src/core/config.py`.
+
+**Claude API** — set `ANTHROPIC_API_KEY` in your environment, or fill `CloudConfig.anthropic_api_key` in config.
+
+**OpenAI API** — set `OPENAI_API_KEY` in your environment, or fill `CloudConfig.openai_api_key` in config.
+
+**Claude CLI** — install [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude` on PATH) and `pip install claude-agent-sdk`.
+
+Select the active adapter in `src/core/config.py`:
+
+```python
+active_adapter: str = "claude_cli"  # "local_llm", "claude", "openai", "claude_cli", "copilot_cli", "auggie_cli"
+```
 
 ## Running
 
 ```bash
-cd C:\development\opti
 python src/main.py
 ```
 
