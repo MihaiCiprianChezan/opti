@@ -41,13 +41,23 @@ class CloudConfig:
 
 
 @dataclass
+class CLIConfig:
+    """CLI agent adapter settings."""
+    claude_cli_enabled: bool = True
+    copilot_cli_enabled: bool = True
+    auggie_cli_enabled: bool = True
+    cli_cwd: str = ""  # shared working directory, empty = os.getcwd()
+
+
+@dataclass
 class Config:
     """Root configuration."""
-    active_adapter: str = "local_llm"
+    active_adapter: str = "claude_cli" # "local_llm", "claude_cli", "auggie_cli" or "copilot_cli"
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     ui: UIConfig = field(default_factory=UIConfig)
     inference: InferenceConfig = field(default_factory=InferenceConfig)
     cloud: CloudConfig = field(default_factory=CloudConfig)
+    cli: CLIConfig = field(default_factory=CLIConfig)
 
     # Paths
     root: Path = field(default_factory=lambda: Path(__file__).parent.parent.parent)

@@ -198,6 +198,11 @@ class VoiceIO:
                 text = self._asr_queue.get(timeout=0.1)
                 if text and text.strip():
                     self.logger.debug(f"Speech recognized: '{text}'")
+                    # Filter STT noise: single words under 5 chars don't interrupt or get published
+                    words = text.strip().split()
+                    if len(words) == 1 and len(words[0]) < 5:
+                        self.logger.debug(f"Ignoring short STT noise: '{text}'")
+                        continue
                     # Interrupt current speech when user talks
                     if self._speaking:
                         self.interrupt()

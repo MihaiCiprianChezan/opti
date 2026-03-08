@@ -67,6 +67,12 @@ class AgentShell:
         if not text:
             return
 
+        # Filter STT noise: single words under 5 chars (breathing, "huh", "um", etc.)
+        words = text.split()
+        if len(words) == 1 and len(words[0]) < 5:
+            self.logger.debug(f"Ignoring short STT noise: '{text}'")
+            return
+
         with self._processing_lock:
             if self._processing:
                 # Interrupt current processing — user spoke over the agent
@@ -114,7 +120,18 @@ class AgentShell:
                     self.logger.info("Processing interrupted by user.")
                     break
 
-                if response.text:
+                # CLI adapters emit TOOL_CALLING with progress text — speak immediately
+                if response.state == AdapterState.TOOL_CALLING and response.text:
+                    cleaned = self._text_cleaner.deep_text_clean(response.text)
+                    cleaned = _NON_SPEAKABLE_RE.sub('', cleaned).strip()
+                    if cleaned:
+                        self.event_bus.publish_event("agent_response", {
+                            "text": cleaned,
+                            "speaking_color": STATE_COLORS[AdapterState.TOOL_CALLING],
+                            "after_color": STATE_COLORS[AdapterState.TOOL_CALLING],
+                            "stream": True,
+                        })
+                elif response.text:
                     current_sentence += response.text
                     full_response += response.text
 

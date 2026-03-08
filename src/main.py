@@ -67,6 +67,45 @@ def register_adapters(registry: AdapterRegistry, config: Config) -> None:
     except Exception as e:
         logger.warning(f"OpenAI adapter not available: {e}")
 
+    # --- CLI Agent Adapters (via official SDKs) ---
+    cli_cwd = config.cli.cli_cwd or None
+
+    # Claude CLI (via claude-agent-sdk)
+    if config.cli.claude_cli_enabled:
+        try:
+            from adapter.claude_cli import ClaudeCLIAdapter
+            adapter = ClaudeCLIAdapter(cwd=cli_cwd)
+            if adapter.is_available():
+                registry.register(adapter)
+            else:
+                logger.info("Claude CLI adapter skipped: 'claude' or claude-agent-sdk not available")
+        except Exception as e:
+            logger.warning(f"Claude CLI adapter not available: {e}")
+
+    # GitHub Copilot CLI (via github-copilot-sdk)
+    if config.cli.copilot_cli_enabled:
+        try:
+            from adapter.copilot_cli import CopilotCLIAdapter
+            adapter = CopilotCLIAdapter(cwd=cli_cwd)
+            if adapter.is_available():
+                registry.register(adapter)
+            else:
+                logger.info("Copilot CLI adapter skipped: CLI binary or SDK not available")
+        except Exception as e:
+            logger.warning(f"Copilot CLI adapter not available: {e}")
+
+    # Auggie CLI (via auggie-sdk)
+    if config.cli.auggie_cli_enabled:
+        try:
+            from adapter.auggie_cli import AuggieCLIAdapter
+            adapter = AuggieCLIAdapter(cwd=cli_cwd)
+            if adapter.is_available():
+                registry.register(adapter)
+            else:
+                logger.info("Auggie CLI adapter skipped: 'auggie' or auggie-sdk not available")
+        except Exception as e:
+            logger.warning(f"Auggie CLI adapter not available: {e}")
+
     # Set active adapter from config
     if config.active_adapter and registry.get(config.active_adapter):
         registry.set_active(config.active_adapter)
