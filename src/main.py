@@ -1,11 +1,17 @@
 """
 AgentOPTI v2 — Voice + Visual Shell for AI Agents.
 
-Entry point that wires together:
-  - Energy Star UI (Qt main thread)
-  - VoiceIO (ASR + TTS)
-  - AgentShell (orchestrator)
-  - Adapter Registry (backend-agnostic agent backends)
+This module is the desktop application entry point. It builds the Qt app,
+creates the floating Energy Star widget, wires the synchronous event bus to the
+UI bridge, initializes voice input and output, registers every available agent
+adapter, and starts the shell loop in a background thread.
+
+The runtime is intentionally split across two responsibilities:
+  - the Qt main thread owns the Energy Star widget and event loop
+  - the shell thread owns voice startup, the agent shell, and adapter activity
+
+That separation keeps the UI responsive while still allowing continuous speech
+recognition, streamed agent responses, and clean shutdown through Qt signals.
 """
 import os
 import sys
@@ -26,7 +32,15 @@ from utils.app_logger import AppLogger
 
 
 def register_adapters(registry: AdapterRegistry, config: Config) -> None:
-    """Register all available adapters. Each one is optional — missing deps are skipped."""
+    """Register every adapter that is enabled and currently available.
+
+    Adapters are added conservatively. Missing SDKs, missing CLI binaries, or
+    absent API keys do not stop startup. Instead, the unavailable adapter is
+    skipped and the rest of the application can continue running.
+
+    The active adapter is selected from config only if it was successfully
+    registered.
+    """
     logger = AppLogger(name="AdapterSetup", log_level=logging.DEBUG)
 
     # Local LLM (always available if models exist)
@@ -115,7 +129,12 @@ def register_adapters(registry: AdapterRegistry, config: Config) -> None:
 
 
 def show_energy_star(qt_app: QApplication, energy_star: Star) -> None:
-    """Position and show the Energy Star widget."""
+    """Position and show the Energy Star widget near the lower-right corner.
+
+    The placement uses the primary screen geometry and the widget's current size
+    so the star appears in its default desktop position before the Qt event loop
+    takes over.
+    """
     screen = qt_app.primaryScreen().geometry()
     widget_size = energy_star.size()
     x = screen.width() - widget_size.width() // 1.25
@@ -128,9 +147,22 @@ def main(use_hardware_acceleration: bool = True):
     """
     Main entry point for AgentOPTI v2.
 
+    Startup flow:
+        1. Load configuration and create the Qt application.
+        2. Create the Energy Star widget and event bus.
+        3. Bridge shell events into Qt-safe UI signals.
+        4. Register all available adapters.
+        5. Initialize VoiceIO and AgentShell.
+        6. Start the shell loop in a background thread.
+        7. Show the UI and enter the Qt event loop.
+
     Architecture:
-        Qt main thread  →  Energy Star UI
-        Shell thread    →  VoiceIO + AgentShell + Adapters
+        Qt main thread  →  Energy Star UI and widget lifetime
+        Shell thread    →  VoiceIO, AgentShell, adapter interaction
+
+    Args:
+        use_hardware_acceleration: When True, the Energy Star prefers the GPU
+            media path. When False, it falls back to software rendering.
     """
     logger = AppLogger(name="AgentOPTI-v2", log_level=logging.DEBUG)
     logging.getLogger("comtypes").setLevel(logging.WARNING)
@@ -161,7 +193,13 @@ def main(use_hardware_acceleration: bool = True):
     shell = AgentShell(event_bus, registry, config)
 
     def start_shell():
-        """Initialize and start the shell in a background thread."""
+        """Initialize voice services and keep the shell side alive.
+
+        This function runs inside the dedicated shell thread so the Qt main
+        thread stays free for rendering and user interaction. After startup it
+        publishes a greeting, then idles in a small loop until voice processing
+        stops.
+        """
         try:
             logger.info("Initializing VoiceIO...")
             voice_io.initialize()
@@ -191,6 +229,7 @@ def main(use_hardware_acceleration: bool = True):
 
     # Stop background threads BEFORE Qt destroys widgets
     def on_about_to_quit():
+        """Stop background services before Qt destroys UI objects."""
         logger.info("Qt shutting down — stopping background services first...")
         voice_io.stop()
         shell.cleanup()

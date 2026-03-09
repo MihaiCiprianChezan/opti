@@ -16,6 +16,7 @@ from core.config import Config
 from energy.colors import Colors
 from utils.app_logger import AppLogger
 from utils.text_clean import TextCleaner
+from utils.utils import is_prompt_sane_and_valid
 
 # Matches non-speakable characters: mojibake (Ã°ÂÂ), emojis, control chars, etc.
 # Keeps ASCII printable (space-tilde) — sufficient for English TTS.
@@ -54,6 +55,7 @@ class AgentShell:
         self._processing = False
         self._processing_lock = threading.Lock()
         self._should_stop = threading.Event()
+        self._pending_speech: str | None = None  # Speech captured during an interrupt
 
         # Reuse battle-tested text cleaning from old codebase
         self._text_cleaner = TextCleaner()
@@ -71,12 +73,12 @@ class AgentShell:
 
         with self._processing_lock:
             if self._processing:
-                # Interrupt current processing — user spoke over the agent
-                self.logger.info(f"Interrupting current response for new input: '{text}'")
+                # Interrupt current processing — save speech to re-process after thread exits
+                self.logger.info(f"Interrupting current response for: '{text}'")
                 self._should_stop.set()
                 self.stop_current()
-                # Don't start new processing here — wait for the current thread to release
-                # The interrupt+queue drain in VoiceIO handles the TTS side
+                # Re-process only if it's a real query, not just an interrupt phrase ("stop", "hold on")
+                self._pending_speech = text if is_prompt_sane_and_valid(text, min_tokens=4) else None
                 return
             self._processing = True
 
@@ -180,7 +182,16 @@ class AgentShell:
                 "after_color": Colors.initial,
             })
         finally:
-            self._processing = False
+            with self._processing_lock:
+                pending = self._pending_speech
+                self._pending_speech = None
+                if pending:
+                    # User spoke while we were interrupted — start processing their speech now
+                    self._should_stop.clear()
+                    thread = threading.Thread(target=self._process_message, args=(pending,), daemon=True, name="ShellProcessing")
+                    thread.start()
+                else:
+                    self._processing = False
 
     @staticmethod
     def _is_sentence_end(text: str) -> bool:
