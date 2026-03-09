@@ -82,7 +82,7 @@ The active adapter is set in `src/core/config.py` and can be switched at runtime
 ### 1. Clone and create virtual environment
 
 ```bash
-git clone https://github.com/your-org/opti.git
+git clone https://github.com/MihaiCiprianChezan/opti.git
 cd opti
 
 python -m venv .venv
