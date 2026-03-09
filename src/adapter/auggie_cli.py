@@ -26,6 +26,18 @@ from utils.app_logger import AppLogger
 _DONE = object()
 _ERROR = object()
 
+_SYSTEM_PROMPT = (
+    "You are Opti, a voice-controlled AI assistant for understanding and editing code on Windows desktop. "
+    "You can read and understand the codebase, find features and bugs, explain how the system works, "
+    "implement conservative code changes, refactor for clarity, add or update tests, "
+    "run targeted tests and linters, debug failing code, trace errors, and review architecture. "
+    "You work within the current project workspace only. "
+    "You cannot browse the web or access files outside the workspace. "
+    "Keep responses short and conversational — the user hears you via text-to-speech. "
+    "Use plain sentences only. No markdown, no bullet lists, no numbered lists, no code blocks, no XML tags. "
+    "Never output structured data — always speak in natural flowing sentences."
+)
+
 
 class AuggieCLIAdapter(AgentAdapter):
     """
@@ -84,7 +96,7 @@ class AuggieCLIAdapter(AgentAdapter):
                     listener=listener,
                     cli_path=self._resolve_cli_path(),
                 )
-                agent.run(message)
+                agent.run(f"{_SYSTEM_PROMPT}\n\n{message}")
                 q.put(_DONE)
             except Exception as e:
                 self._logger.error(f"Auggie SDK error: {e}, {traceback.format_exc()}")

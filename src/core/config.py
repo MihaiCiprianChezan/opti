@@ -52,7 +52,7 @@ class CLIConfig:
 @dataclass
 class Config:
     """Root configuration."""
-    active_adapter: str = "claude_cli" # "local_llm", "claude_cli", "auggie_cli" or "copilot_cli"
+    active_adapter: str = "auggie_cli" # "local_llm", "claude_cli", "auggie_cli" or "copilot_cli"
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     ui: UIConfig = field(default_factory=UIConfig)
     inference: InferenceConfig = field(default_factory=InferenceConfig)
