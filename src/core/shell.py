@@ -20,6 +20,8 @@ from utils.text_clean import TextCleaner
 # Matches non-speakable characters: mojibake (Ã°ÂÂ), emojis, control chars, etc.
 # Keeps ASCII printable (space-tilde) — sufficient for English TTS.
 _NON_SPEAKABLE_RE = re.compile(r'[^\x20-\x7E]+')
+# Strips XML/HTML tags (e.g. auggie SDK structured output: <augment-agent-result>...)
+_XML_TAGS_RE = re.compile(r'<[^>]+>')
 
 
 
@@ -117,6 +119,7 @@ class AgentShell:
                 # CLI adapters emit TOOL_CALLING with progress text — speak immediately
                 if response.state == AdapterState.TOOL_CALLING and response.text:
                     cleaned = self._text_cleaner.deep_text_clean(response.text)
+                    cleaned = _XML_TAGS_RE.sub(' ', cleaned)
                     cleaned = _NON_SPEAKABLE_RE.sub('', cleaned).strip()
                     if cleaned:
                         self.event_bus.publish_event("agent_response", {
@@ -148,6 +151,7 @@ class AgentShell:
 
                 # Clean text: markdown → emojis → mojibake → whitespace
                 sentence = self._text_cleaner.deep_text_clean(sentence)
+                sentence = _XML_TAGS_RE.sub(' ', sentence)
                 sentence = _NON_SPEAKABLE_RE.sub('', sentence).strip()
                 if not sentence:
                     continue
