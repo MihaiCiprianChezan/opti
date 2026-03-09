@@ -3,6 +3,8 @@ import time
 import traceback
 from queue import Queue, Empty
 
+from fastpunct import FastPunct
+
 from speech.recognizer import SpeechRecognizer
 from utils.app_logger import AppLogger
 from utils.threads import WorkerThread
@@ -39,15 +41,34 @@ class ASRx:
         self.thread = None
         self.recognizer = None
         self._stop_requested = False
+        self._fastpunct = None
 
     def initialize_sync(self):
-        """Initialize the speech recognizer synchronously"""
+        """Initialize the speech recognizer and punctuation restorer synchronously"""
         try:
             self.recognizer = SpeechRecognizer()
-            self.logger.info(f"ASR initialized successfully")
+            self.logger.info("ASR initialized successfully")
         except Exception as e:
             self.logger.error(f"Failed to initialize ASR: {e}")
             raise
+
+        try:
+            self._fastpunct = FastPunct()
+            self.logger.info("FastPunct punctuation restorer initialized successfully")
+        except Exception as e:
+            self.logger.warning(f"FastPunct unavailable, punctuation will not be restored: {e}, {traceback.format_exc()}")
+            self._fastpunct = None
+
+    def _restore_punctuation(self, text: str) -> str:
+        """Restore punctuation to raw ASR text using FastPunct. Falls back to original on failure."""
+        if not self._fastpunct:
+            return text
+        try:
+            results = self._fastpunct.punct([text])
+            return results[0] if results else text
+        except Exception as e:
+            self.logger.warning(f"Punctuation restoration failed, using raw text: {e}")
+            return text
 
     def start(self):
         """Start the ASR service in a background thread"""
@@ -77,6 +98,7 @@ class ASRx:
 
                 speech_to_text = self.recognizer.recognize()
                 if speech_to_text:
+                    speech_to_text = self._restore_punctuation(speech_to_text)
                     self.queue.put(speech_to_text)
                     self.logger.debug(
                         f"ASRxService[/] Queue: {list(self.queue.queue)}, < Recognized: `{speech_to_text}`"

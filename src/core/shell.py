@@ -67,12 +67,6 @@ class AgentShell:
         if not text:
             return
 
-        # Filter STT noise: single words under 5 chars (breathing, "huh", "um", etc.)
-        words = text.split()
-        if len(words) == 1 and len(words[0]) < 5:
-            self.logger.debug(f"Ignoring short STT noise: '{text}'")
-            return
-
         with self._processing_lock:
             if self._processing:
                 # Interrupt current processing — user spoke over the agent

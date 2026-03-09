@@ -9,7 +9,8 @@ from vosk import Model, KaldiRecognizer
 
 from pathlib import Path
 
-VOSK_MODEL_PATH = str(Path(__file__).parent.parent.parent / "models" / "vosk-model-small-en-us-0.15")
+# VOSK_MODEL_PATH = str(Path(__file__).parent.parent.parent / "models" / "vosk-model-small-en-us-0.15")
+VOSK_MODEL_PATH = str(Path(__file__).parent.parent.parent / "models" / "vosk-model-en-us-0.22-lgraph")
 
 vosk.SetLogLevel(0)
 from utils.app_logger import AppLogger
